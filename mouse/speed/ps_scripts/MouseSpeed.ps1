@@ -1,24 +1,32 @@
-﻿<#
+<#
 	.SYNOPSIS
-		Sets the mouse speed.
+		Sets mouse parameters.
 
 	.DESCRIPTION
-		Sets the mouse speed via the SystemParametersInfo SPI_SETMOUSESPEED
-        and stores the speed in the registry
+		Sets the mouse speed via the SystemParametersInfo
+		and stores the speed in the registry
 
 	.PARAMETER  Speed
-        Integer between 1 (slowest) and 20 (fastest). A value of 10 is the default.
+		Integer between 1 (slowest) and 20 (fastest).
+
+	.PARAMETER  ScrollLines
+		Integer between -1 (slowest) and 100.
 
 	.EXAMPLE
-        Sets the mouse speed to the defautl value.
+		Sets the mouse speed to the value 10.
 
-		PS C:\> Set-MouseSpeed -Speed 10
+		PS C:\> Set-Mouse -Speed 10
 
-	.INPUTS
+	.EXAMPLE
+		Sets the mouse WheelScrollLines to the value 5.
+
+		PS C:\> Set-Mouse -ScrollLines 5
+
+		.INPUTS
 		System.int
 
 	.NOTES
-		See Get-MouseSpeed also.
+		See Get-Mouse also.
 
 	.LINK
 		about_functions_advanced
@@ -26,46 +34,59 @@
 	.LINK
 		about_comment_based_help
 
-    .LINK
-        https://msdn.microsoft.com/en-us/library/ms724947(v=VS.85).aspx
+	.LINK
+		https://msdn.microsoft.com/en-us/library/ms724947(v=VS.85).aspx
+				
+	.LINK
+		https://github.com/raevilman/windows-scripts/edit/master/mouse/speed/ps_scripts/MouseSpeed.ps1
 
 #>
-function Set-MouseSpeed() {
+function Set-Mouse() {
 
-    [cmdletbinding()]
-    Param(
-        [Parameter(ValueFromPipeline=$true)]
-        [ValidateRange(1,20)] 
-        [int]
-        $Speed = 10
-    )       
+	[cmdletbinding()]
+	Param(
+		[ValidateRange(1, 20)] 
+		[int]
+		$Speed,
+		[ValidateRange(-1, 100)] 
+		[int]
+		$ScrollLines
+	)       
 
-$MethodDefinition = @"
-    [DllImport("user32.dll", EntryPoint = "SystemParametersInfo")]
-    public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, uint pvParam, uint fWinIni);
+	$MethodDefinition = @"
+		[DllImport("user32.dll", EntryPoint = "SystemParametersInfo")]
+		public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, uint pvParam, uint fWinIni);
 "@
-    $User32 = Add-Type -MemberDefinition $MethodDefinition -Name "User32Set" -Namespace Win32Functions -PassThru
-    $User32::SystemParametersInfo(0x0071,0,$Speed,0) | Out-Null
-    Set-ItemProperty -Path "HKCU:\Control Panel\Mouse" -Name MouseSensitivity -Value $Speed
+	$User32 = Add-Type -MemberDefinition $MethodDefinition -Name "User32Set" -Namespace Win32Functions -PassThru
+	if ($Speed) {
+		Write-Verbose "new mouse speed: $Speed"
+		$User32::SystemParametersInfo(0x0071, 0, $Speed, 0) | Out-Null
+		Set-ItemProperty -Path "HKCU:\Control Panel\Mouse" -Name MouseSensitivity -Value $Speed
+	}
+	if ($ScrollLines) {
+		Write-Verbose "new mouse scrollLines: $ScrollLines"
+		$User32::SystemParametersInfo(0x0069, $ScrollLines, 0, 0x01) | Out-Null
+		Set-ItemProperty -Path "HKCU:\Control Panel\Mouse" -Name WheelScrollLines -Value $ScrollLines
+	}
 }
 
 <#
 	.SYNOPSIS
-		Gets the mouse speed.
+		Gets the mouse settings.
 
 	.DESCRIPTION
-		Gets the mouse speed via the SystemParametersInfo SPI_GETMOUSESPEED
+		Gets the mouse settings via the SystemParametersInfo
 
 	.EXAMPLE
-        Gets the current mouse speed.
+		Gets the current mouse
 
-		PS C:\> Get-MouseSpeed
+		PS C:\> Get-Mouse
 
 	.Outputs
 		System.int
 
 	.NOTES
-		See Set-MouseSpeed also.
+		See Set-Mouse also.
 
 	.LINK
 		about_functions_advanced
@@ -73,19 +94,29 @@ $MethodDefinition = @"
 	.LINK
 		about_comment_based_help
 
-    .LINK
-        https://msdn.microsoft.com/en-us/library/ms724947(v=VS.85).aspx
+	.LINK
+		https://msdn.microsoft.com/en-us/library/ms724947(v=VS.85).aspx
+
+	.LINK
+		https://github.com/raevilman/windows-scripts/edit/master/mouse/speed/ps_scripts/MouseSpeed.ps1
 
 #>
-function Get-MouseSpeed() {
+function Get-Mouse {
+	[cmdletbinding()]
+	param()
 
-$MethodDefinition = @"
-    [DllImport("user32.dll", EntryPoint = "SystemParametersInfo")]
-    public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, ref uint pvParam, uint fWinIni);
+	$MethodDefinition = @"
+		[DllImport("user32.dll", EntryPoint = "SystemParametersInfo")]
+		public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, ref uint pvParam, uint fWinIni);
 "@
-    $User32 = Add-Type -MemberDefinition $MethodDefinition -Name "User32Get" -Namespace Win32Functions -PassThru
+	$User32 = Add-Type -MemberDefinition $MethodDefinition -Name "User32Get" -Namespace Win32Functions -PassThru
 
-    [Int32]$Speed = 0
-    $User32::SystemParametersInfo(0x0070,0,[ref]$Speed,0) | Out-Null
-    return $Speed
+	[Int32]$Speed = 0
+	$User32::SystemParametersInfo(0x0070, 0, [ref]$Speed, 0) | Out-Null
+	[Int32]$ScrollLines = 0
+	$User32::SystemParametersInfo(0x0068, 0, [ref]$ScrollLines, 0) | Out-Null
+	return [pscustomobject]@{
+		"speed"       = $Speed;
+		"scrollLines" = $ScrollLines
+	}
 }
